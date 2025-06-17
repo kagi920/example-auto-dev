@@ -11,6 +11,7 @@ app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+login_manager.login_message = None
 
 def get_db_connection():
     db_path = app.config.get('DATABASE', 'users.db')
@@ -126,6 +127,10 @@ def profile():
         'username': current_user.username,
         'email': current_user.email
     }), 200
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    return jsonify({'error': 'Login required'}), 401
 
 if __name__ == '__main__':
     init_db()
