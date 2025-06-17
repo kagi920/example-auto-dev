@@ -1,10 +1,16 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import hashlib
 import sqlite3
 import os
 from datetime import datetime
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
 
 def get_db_connection():
     db_path = app.config.get('DATABASE', 'users.db')
@@ -25,6 +31,21 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+class User(UserMixin):
+    def __init__(self, id, username, email):
+        self.id = id
+        self.username = username
+        self.email = email
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = get_db_connection()
+    user_data = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    conn.close()
+    if user_data:
+        return User(user_data['id'], user_data['username'], user_data['email'])
+    return None
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
@@ -61,6 +82,50 @@ def signup():
             
     except Exception as e:
         return jsonify({'error': 'サーバーエラーが発生しました'}), 500
+
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+        
+        if not data or not all(k in data for k in ('username', 'password')):
+            return jsonify({'error': 'ユーザー名とパスワードが必要です'}), 400
+        
+        username = data['username']
+        password = data['password']
+        password_hash = hash_password(password)
+        
+        conn = get_db_connection()
+        user_data = conn.execute(
+            'SELECT * FROM users WHERE username = ? AND password_hash = ?',
+            (username, password_hash)
+        ).fetchone()
+        conn.close()
+        
+        if user_data:
+            user = User(user_data['id'], user_data['username'], user_data['email'])
+            login_user(user)
+            return jsonify({'message': 'ログインしました', 'user_id': user.id}), 200
+        else:
+            return jsonify({'error': 'ユーザー名またはパスワードが正しくありません'}), 401
+            
+    except Exception as e:
+        return jsonify({'error': 'サーバーエラーが発生しました'}), 500
+
+@app.route('/logout', methods=['POST'])
+@login_required
+def logout():
+    logout_user()
+    return jsonify({'message': 'ログアウトしました'}), 200
+
+@app.route('/profile')
+@login_required
+def profile():
+    return jsonify({
+        'user_id': current_user.id,
+        'username': current_user.username,
+        'email': current_user.email
+    }), 200
 
 if __name__ == '__main__':
     init_db()
