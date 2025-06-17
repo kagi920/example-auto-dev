@@ -3,7 +3,8 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 import hashlib
 import sqlite3
 import os
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
@@ -27,6 +28,14 @@ def init_db():
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS reset_tokens(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            expires_at TIMESTAMP NOT NULL
         )
     ''')
     conn.commit()
@@ -127,14 +136,60 @@ def profile():
         'email': current_user.email
     }), 200
 
+def save_token(user_id, token):
+    conn = get_db_connection()
+    expires = datetime.utcnow() + timedelta(hours=1)
+    conn.execute("INSERT INTO reset_tokens (user_id, token, expires_at) VALUES(?,?,?)",
+                 (user_id, token, expires))
+    conn.commit()
+    conn.close()
+
+@app.route('/reset-password-request', methods=['POST'])
+def reset_request():
+    data = request.get_json()
+    if not data or 'email' not in data:
+        return jsonify({'error': 'メールアドレスが必要です'}), 400
+    
+    email = data.get('email')
+    conn = get_db_connection()
+    user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    conn.close()
+    
+    if not user:
+        return jsonify({'error': 'ユーザーが存在しません'}), 404
+    
+    token = secrets.token_urlsafe(32)
+    save_token(user['id'], token)
+    # 本番ならメール送信。開発中は token を JSON で返す
+    return jsonify({'token': token}), 200
+
+@app.route('/reset-password-confirm', methods=['POST'])
+def reset_confirm():
+    data = request.get_json()
+    if not data or not all(k in data for k in ('token', 'password')):
+        return jsonify({'error': 'トークンとパスワードが必要です'}), 400
+    
+    token = data.get('token')
+    new_pw = data.get('password')
+    
+    if len(new_pw) < 6:
+        return jsonify({'error': 'パスワードは6文字以上である必要があります'}), 400
+    
+    conn = get_db_connection()
+    row = conn.execute("SELECT * FROM reset_tokens WHERE token = ?", (token,)).fetchone()
+    
+    if not row or datetime.fromisoformat(row['expires_at'].replace('Z', '+00:00')) < datetime.utcnow():
+        conn.close()
+        return jsonify({'error': 'トークン無効または期限切れ'}), 400
+    
+    pw_hash = hash_password(new_pw)
+    conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (pw_hash, row['user_id']))
+    conn.execute("DELETE FROM reset_tokens WHERE token = ?", (token,))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'message': 'パスワードを更新しました'}), 200
+
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)
-パスワードリセット機能の実装のため、以下の変更が必要です：
-
-1. データベーステーブル追加（password_reset_tokens）
-2. メール送信機能の実装
-3. トークン生成・検証機能
-4. `/reset-password` エンドポイント
-
-ファイル編集の権限を許可していただければ、実装を進めます。

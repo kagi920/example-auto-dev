@@ -95,3 +95,63 @@ def test_login_invalid_credentials(client):
 def test_profile_requires_login(client):
     response = client.get('/profile')
     assert response.status_code == 401
+
+def test_reset_password_flow(client):
+    # 1) Create user
+    client.post('/signup',
+                data=json.dumps({
+                    'username': 'resetuser',
+                    'email': 'reset@example.com',
+                    'password': 'oldpassword123'
+                }),
+                content_type='application/json')
+    
+    # 2) Request password reset
+    response = client.post('/reset-password-request',
+                          data=json.dumps({
+                              'email': 'reset@example.com'
+                          }),
+                          content_type='application/json')
+    
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    token = data['token']
+    
+    # 3) Confirm password reset
+    response = client.post('/reset-password-confirm',
+                          data=json.dumps({
+                              'token': token,
+                              'password': 'newpassword123'
+                          }),
+                          content_type='application/json')
+    
+    assert response.status_code == 200
+    
+    # 4) Login with new password
+    response = client.post('/login',
+                          data=json.dumps({
+                              'username': 'resetuser',
+                              'password': 'newpassword123'
+                          }),
+                          content_type='application/json')
+    
+    assert response.status_code == 200
+
+def test_reset_password_invalid_email(client):
+    response = client.post('/reset-password-request',
+                          data=json.dumps({
+                              'email': 'nonexistent@example.com'
+                          }),
+                          content_type='application/json')
+    
+    assert response.status_code == 404
+
+def test_reset_password_invalid_token(client):
+    response = client.post('/reset-password-confirm',
+                          data=json.dumps({
+                              'token': 'invalid-token',
+                              'password': 'newpassword123'
+                          }),
+                          content_type='application/json')
+    
+    assert response.status_code == 400
