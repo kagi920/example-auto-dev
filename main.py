@@ -130,3 +130,11 @@ def profile():
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)
+パスワードリセット機能の実装のため、以下の変更が必要です：
+
+1. データベーステーブル追加（password_reset_tokens）
+2. メール送信機能の実装
+3. トークン生成・検証機能
+4. `/reset-password` エンドポイント
+
+ファイル編集の権限を許可していただければ、実装を進めます。
