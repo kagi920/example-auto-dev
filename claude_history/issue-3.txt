@@ -1,0 +1,28 @@
+I've implemented a Flask-based user registration API with the following features:
+
+**POST /signup endpoint** (`main.py:25`):
+- Accepts JSON with username, email, and password
+- Validates required fields and password length (minimum 6 characters)
+- Hashes passwords using SHA-256
+- Stores users in SQLite database with unique constraints
+- Returns appropriate error messages in Japanese
+- Handles duplicate username/email conflicts
+
+**Database structure** (`main.py:12`):
+- SQLite database with users table
+- Fields: id, username, email, password_hash, created_at
+- Unique constraints on username and email
+
+**Security features**:
+- Password hashing with SHA-256
+- Input validation
+- SQL injection protection using parameterized queries
+- Proper error handling
+
+The API responds with status codes:
+- 201: Successful registration
+- 400: Missing required fields or invalid password
+- 409: Username/email already exists
+- 500: Server error
+
+To run: `python main.py` (requires Flask: `pip install flask`)

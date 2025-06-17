@@ -1,35 +1,67 @@
-I need write permissions to create the login screen files. The implementation would include:
+from flask import Flask, request, jsonify
+import hashlib
+import sqlite3
+import os
+from datetime import datetime
 
-1. **index.html** - Basic HTML structure with login form (username/password fields)
-2. **style.css** - CSS styling for a clean, responsive login interface  
-3. **script.js** - JavaScript for basic form validation and submission handling
+app = Flask(__name__)
 
-The login screen would be in Japanese as indicated by the issue title and include standard login functionality with proper form validation.
-I've implemented a Flask-based user registration API with the following features:
+def get_db_connection():
+    db_path = app.config.get('DATABASE', 'users.db')
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-**POST /signup endpoint** (`main.py:25`):
-- Accepts JSON with username, email, and password
-- Validates required fields and password length (minimum 6 characters)
-- Hashes passwords using SHA-256
-- Stores users in SQLite database with unique constraints
-- Returns appropriate error messages in Japanese
-- Handles duplicate username/email conflicts
+def init_db():
+    conn = get_db_connection()
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-**Database structure** (`main.py:12`):
-- SQLite database with users table
-- Fields: id, username, email, password_hash, created_at
-- Unique constraints on username and email
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
-**Security features**:
-- Password hashing with SHA-256
-- Input validation
-- SQL injection protection using parameterized queries
-- Proper error handling
+@app.route('/signup', methods=['POST'])
+def signup():
+    try:
+        data = request.get_json()
+        
+        if not data or not all(k in data for k in ('username', 'email', 'password')):
+            return jsonify({'error': '必須フィールドが不足しています'}), 400
+        
+        username = data['username']
+        email = data['email']
+        password = data['password']
+        
+        if len(password) < 6:
+            return jsonify({'error': 'パスワードは6文字以上である必要があります'}), 400
+        
+        password_hash = hash_password(password)
+        
+        conn = get_db_connection()
+        try:
+            conn.execute(
+                'INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)',
+                (username, email, password_hash)
+            )
+            conn.commit()
+            return jsonify({'message': 'ユーザーが正常に作成されました'}), 201
+        except sqlite3.IntegrityError:
+            return jsonify({'error': 'ユーザー名またはメールアドレスが既に存在します'}), 409
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        return jsonify({'error': 'サーバーエラーが発生しました'}), 500
 
-The API responds with status codes:
-- 201: Successful registration
-- 400: Missing required fields or invalid password
-- 409: Username/email already exists
-- 500: Server error
-
-To run: `python main.py` (requires Flask: `pip install flask`)
+if __name__ == '__main__':
+    init_db()
+    app.run(debug=True)
