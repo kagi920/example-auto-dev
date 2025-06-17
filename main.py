@@ -64,4 +64,4 @@ def signup():
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True)
+    app.run(debug=True)セッション管理を実装するために必要な権限をいただけますか？Flask-Loginをrequirements.txtに追加し、main.pyにセッション管理機能を実装する必要があります。
