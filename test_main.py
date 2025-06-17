@@ -59,3 +59,39 @@ def test_signup_duplicate_username(client):
                           content_type='application/json')
     
     assert response.status_code == 409
+
+def test_login_success(client):
+    # First register a user
+    client.post('/signup',
+                data=json.dumps({
+                    'username': 'testuser',
+                    'email': 'test@example.com',
+                    'password': 'password123'
+                }),
+                content_type='application/json')
+    
+    # Then login
+    response = client.post('/login',
+                          data=json.dumps({
+                              'username': 'testuser',
+                              'password': 'password123'
+                          }),
+                          content_type='application/json')
+    
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['message'] == 'ログインしました'
+
+def test_login_invalid_credentials(client):
+    response = client.post('/login',
+                          data=json.dumps({
+                              'username': 'nonexistent',
+                              'password': 'wrongpass'
+                          }),
+                          content_type='application/json')
+    
+    assert response.status_code == 401
+
+def test_profile_requires_login(client):
+    response = client.get('/profile')
+    assert response.status_code == 401
